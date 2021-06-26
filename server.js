@@ -40,7 +40,7 @@ bot.on('message', async (msg) => {
 
   const dateMoment = moment(new Date(msg.date * 1000)).subtract(1, 'days');
 
-  const html = await getFetch(text, dateMoment.format('DD-MM-YYYY'));
+  const html = await getFetch(text, dateMoment);
   const $ = cheerio.load(html);
 
   const daysOfWeek = $('body > main > div > div.content-left > section > header > div > a:nth-child(2)').text().slice(5);
@@ -151,12 +151,14 @@ bot.on('message', async (msg) => {
 
 bot.on('callback_query', async (query) => {
 
-  const dateMoment = moment(new Date(msg.date * 1000)).subtract(1, 'days');
+  const chatId = query.message.chat.id
 
-  const html = await getFetch(text, dateMoment.format('DD-MM-YYYY'));
+  const dateMoment = moment(new Date(query.message.date * 1000)).subtract(1, 'days');
+
+  const html = await getFetch(query.data, dateMoment);
   const $ = cheerio.load(html);
 
-  const daysOfWeek = $('.header-time').text().slice(8, 18).trim();
+  const daysOfWeek = $('body > main > div > div.content-left > section > header > div > a:nth-child(2)').text().slice(5);
 
   const scrapedData = [];
   const tableHeaders = [];
@@ -184,7 +186,7 @@ bot.on('callback_query', async (query) => {
     scrapedData.push(tableRow);
   });
 
-  const chatId = query.message.chat.id
+  const testHtml = generateTable(scrapedData);
 
   switch (true) {
     case query.data === '/xsmb':
@@ -217,15 +219,16 @@ bot.onText(/\/xsmb (.+)/, async (msg, match) => {
 
   const dateValid = checkValidDateInput(match[1]);
 
+  const dateFormat = getDateMatched(match[1]);
+
   const chatId = msg.chat.id;
 
-  const dateMatched = dateValid ? match[1] : '';
-  const dateMoment = moment(new Date(match[1]));
+  const dateMoment = dateValid ? moment(new Date(dateFormat)) : null;
 
-  const html = await getFetch('/xsmb', dateMatched);
+  const html = await getFetch('/xsmb', dateMoment);
   const $ = cheerio.load(html);
 
-  const daysOfWeek = $('.header-time').text().slice(8, 18).trim();
+  const daysOfWeek = $('body > main > div > div.content-left > section > header > div > a:nth-child(2)').text().slice(5);
 
   const scrapedData = [];
   const tableHeaders = [];
@@ -253,11 +256,11 @@ bot.onText(/\/xsmb (.+)/, async (msg, match) => {
     scrapedData.push(tableRow);
   });
 
-  // const testHtml = generateTable(scrapedData);
+  const testHtml = generateTable(scrapedData);
 
   bot.sendMessage(chatId, `Xổ số Miền Bắc ngày ${dateMoment.format('DD/MM')} (${daysOfWeek})\n` +
     "--------------------\n\n" +
-    `${JSON.stringify(scrapedData)}`,
+    `${testHtml}`,
     { parse_mode: 'Markdown' }
   )
 })
@@ -266,14 +269,16 @@ bot.onText(/\/xsmn (.+)/, async (msg, match) => {
 
   const dateValid = checkValidDateInput(match[1]);
 
+  const dateFormat = getDateMatched(match[1]);
+
   const chatId = msg.chat.id;
 
-  const dateMoment = dateValid ? match[1] : '';
+  const dateMoment = dateValid ? moment(new Date(dateFormat)) : null;
 
-  const html = await getFetch('/xsmb', dateMoment);
+  const html = await getFetch('/xsmn', dateMoment);
   const $ = cheerio.load(html);
 
-  const daysOfWeek = $('.header-time').text().slice(8, 18).trim();
+  const daysOfWeek = $('body > main > div > div.content-left > section > header > div > a:nth-child(2)').text().slice(5);
 
   const scrapedData = [];
   const tableHeaders = [];
@@ -314,14 +319,16 @@ bot.onText(/\/xsmt (.+)/, async (msg, match) => {
 
   const dateValid = checkValidDateInput(match[1]);
 
+  const dateMatch = getDateMatched(match[1]);
+
   const chatId = msg.chat.id;
 
-  const dateMoment = dateValid ? match[1] : '';
+  const dateMoment = dateValid ? moment(new Date(dateMatch)) : null;
 
-  const html = await getFetch('/xsmb', dateMoment);
+  const html = await getFetch('/xsmt', dateMoment);
   const $ = cheerio.load(html);
 
-  const daysOfWeek = $('.header-time').text().slice(8, 18).trim();
+  const daysOfWeek = $('body > main > div > div.content-left > section > header > div > a:nth-child(2)').text().slice(5);
 
   const scrapedData = [];
   const tableHeaders = [];
@@ -359,8 +366,12 @@ bot.onText(/\/xsmt (.+)/, async (msg, match) => {
 });
 
 async function getFetch(text, dateMoment) {
-  return fetch(`https://xoso.com.vn${text}-${dateMoment}.html`).then(res => res.text())
+  return fetch(`https://xoso.com.vn${text}-${dateMoment.format('DD-MM-YYYY')}.html`).then(res => res.text())
 };
+
+function getDateMatched(match) {
+  return match[1].split("-").reverse().join("-");
+}
 
 function checkValidDateInput(dateMatch) {
   const regex = new RegExp(/^([0-2][0-9]|(3)[0-1])(\-)(((0)[0-9])|((1)[0-2]))(\-)\d{4}$/i);
