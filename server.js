@@ -4,8 +4,14 @@ const moment = require('moment');
 const fetch = require('node-fetch');
 const cheerio = require('cheerio');
 const lodash = require('lodash');
-const { forOwn } = lodash;
+const Promise = require('bluebird');
+const e = require('express');
+const { groupBy, chain, forOwn } = lodash;
+
 require('dotenv').config();
+Promise.config({
+  cancellation: true
+});
 
 const TOKEN = process.env.TOKEN;
 const URL = process.env.URL; // ngrok http 3000
@@ -43,14 +49,28 @@ bot.on('message', async (msg) => {
   const html = await getFetch(text, dateMoment);
   const $ = cheerio.load(html);
 
-  const daysOfWeek = $('body > main > div > div.content-left > section > header > div > a:nth-child(2)').text().slice(5);
+  let daysOfWeek = '';
+  let radioName = '';
+  if (text === '/xsmb') {
+    daysOfWeek = $('header > h2 > a:nth-child(2)').text().slice(5);
+    radioName = $('header > h2 > a:nth-child(4)').text()
+  } else {
+    daysOfWeek = $('body > main > div > div.content-left > section > header > div > a:nth-child(2)').text().slice(5);
+  }
 
   const scrapedData = [];
   const tableHeaders = [];
   const tableNameHeader = [];
 
   $(".table-result > tbody > tr").each((index, element) => {
-    $('.table-result > thead > tr').each((i, eThead) => {
+    if (text === '/xsmb') {
+      const th_mb = $(element).find('th');
+      $(th_mb).each((i, itemTh) => {
+        tableHeaders.push($(itemTh).text());
+      });
+    }
+
+    $('.table-result > thead > tr').each((indexThead, eThead) => {
       if (index === 0) {
         const ths = $(eThead).find('th');
         $(ths).each((i, eTh) => {
@@ -62,16 +82,24 @@ bot.on('message', async (msg) => {
 
     const tableRow = {};
     const tds = $(element).find('td');
-    tableRow[tableNameHeader[0]] = $(element).find('th').text();
+
+    tableRow['G'] = $(element).find('th').text();
 
     $(tds).each((iTd, eTd) => {
-      tableRow[tableHeaders.reverse()[iTd]] = $(eTd).text();
+      if (text === '/xsmb') {
+        tableRow[tableHeaders.reverse()[iTd]] = $(eTd).text();
+      }
+      tableRow[tableHeaders.filter(e => e !== 'G')[iTd]] = $(eTd).text();
     })
-
     scrapedData.push(tableRow);
   });
 
-  const testHtml = generateTable(scrapedData);
+  const sanitizeData = groupBy(scrapedData, (item, index) => {
+  console.log("🚀 ~ file: server.js ~ line 98 ~ sanitizeData ~ index", index)
+    console.log("XXXX", item);
+    return item.TPHCM;
+  })
+  console.log("🚀 ~ file: server.js ~ line 102 ~ sanitizeData ~ sanitizeData", sanitizeData)
 
   switch (true) {
     case text === '/start':
@@ -125,22 +153,27 @@ bot.on('message', async (msg) => {
     case text === '/xsmb':
       bot.sendMessage(chatId, `Xổ số Miền Bắc ngày ${dateMoment.format('DD/MM')} (${daysOfWeek})\n` +
         "--------------------\n\n" +
-        `${testHtml}`,
-        { parse_mode: 'Markdown' }
+        `Đài: ${radioName}\n` +
+        `ĐB: ${scrapedData[1]['ĐB']}\n` +
+        `G1: ${scrapedData[2]['1']}\n` +
+        `G2: ${scrapedData[3]['2']}\n` +
+        `G3: ${scrapedData[4]['3']}\n` +
+        `G4: ${scrapedData[5]['4']}\n` +
+        `G5: ${scrapedData[6]['5']}\n` +
+        `G6: ${scrapedData[7]['6']}\n` +
+        `G7: ${scrapedData[8]['7']}\n`
       )
       break;
     case text === '/xsmn':
       bot.sendMessage(chatId, `Xổ số Miền Nam ngày ${dateMoment.format('DD/MM')} (${daysOfWeek})\n` +
         "--------------------\n\n" +
-        `${testHtml}`,
-        { parse_mode: 'Markdown' }
+        `Đài: hello`
       );
       break;
     case text === '/xsmt':
       bot.sendMessage(chatId, `Xổ số Miền Trung ngày ${dateMoment.format('DD/MM')} (${daysOfWeek})\n` +
         "--------------------\n\n" +
-        `${testHtml}`,
-        { parse_mode: 'Markdown' }
+        `${scrapedData}`,
       );
       break;
     case text === 'huy':
@@ -152,37 +185,56 @@ bot.on('message', async (msg) => {
 bot.on('callback_query', async (query) => {
 
   const chatId = query.message.chat.id
+  const text = query.data;
 
   const dateMoment = moment(new Date(query.message.date * 1000)).subtract(1, 'days');
 
-  const html = await getFetch(query.data, dateMoment);
+  const html = await getFetch(text, dateMoment);
   const $ = cheerio.load(html);
 
-  const daysOfWeek = $('body > main > div > div.content-left > section > header > div > a:nth-child(2)').text().slice(5);
+  let daysOfWeek = '';
+  let radioName = '';
+  if (text === '/xsmb') {
+    daysOfWeek = $('header > h2 > a:nth-child(2)').text().slice(5);
+    radioName = $('header > h2 > a:nth-child(4)').text()
+  } else {
+    daysOfWeek = $('body > main > div > div.content-left > section > header > div > a:nth-child(2)').text().slice(5);
+  }
 
   const scrapedData = [];
   const tableHeaders = [];
   const tableNameHeader = [];
 
   $(".table-result > tbody > tr").each((index, element) => {
-    $('.table-result > thead > tr').each((i, eThead) => {
-      if (index === 0) {
-        const ths = $(eThead).find('th');
-        $(ths).each((i, eTh) => {
-          tableHeaders.push($(eTh).text());
-          tableNameHeader.push($(eTh).text());
-        })
-      }
-    })
+    if (text === '/xsmb') {
+      const th_mb = $(element).find('th');
+      $(th_mb).each((i, item) => {
+        tableHeaders.push($(item).text());
+      });
+    } else {
+      $('.table-result > thead > tr').each((i, eThead) => {
+        if (index === 0) {
+          const ths = $(eThead).find('th');
+          $(ths).each((i, eTh) => {
+            tableHeaders.push($(eTh).text());
+            tableNameHeader.push($(eTh).text());
+          })
+        }
+      })
+    }
 
     const tableRow = {};
     const tds = $(element).find('td');
-    tableRow[tableNameHeader[0]] = $(element).find('th').text();
+    if (text !== '/xsmb') {
+      tableRow[tableNameHeader[0]] = $(element).find('th').text();
+    }
 
     $(tds).each((iTd, eTd) => {
+      if (text !== '/xsmb') {
+        tableRow[tableHeaders.reverse()[iTd]] = $(eTd).text();
+      }
       tableRow[tableHeaders.reverse()[iTd]] = $(eTd).text();
     })
-
     scrapedData.push(tableRow);
   });
 
@@ -192,8 +244,15 @@ bot.on('callback_query', async (query) => {
     case query.data === '/xsmb':
       bot.sendMessage(chatId, `Xổ số Miền Bắc ngày ${dateMoment.format('DD/MM')} (${daysOfWeek})\n` +
         "--------------------\n\n" +
-        `${testHtml}`,
-        { parse_mode: 'Markdown' }
+        `Đài: ${radioName}\n` +
+        `ĐB: ${scrapedData[1]['ĐB']}\n` +
+        `G1: ${scrapedData[2]['1']}\n` +
+        `G2: ${scrapedData[3]['2']}\n` +
+        `G3: ${scrapedData[4]['3']}\n` +
+        `G4: ${scrapedData[5]['4']}\n` +
+        `G5: ${scrapedData[6]['5']}\n` +
+        `G6: ${scrapedData[7]['6']}\n` +
+        `G7: ${scrapedData[8]['7']}\n`
       )
       break;
     case query.data === '/xsmn':
@@ -228,40 +287,38 @@ bot.onText(/\/xsmb (.+)/, async (msg, match) => {
   const html = await getFetch('/xsmb', dateMoment);
   const $ = cheerio.load(html);
 
-  const daysOfWeek = $('body > main > div > div.content-left > section > header > div > a:nth-child(2)').text().slice(5);
+  const daysOfWeek = $('header > h2 > a:nth-child(2)').text().slice(5);
+  const radioName = $('header > h2 > a:nth-child(4)').text()
 
   const scrapedData = [];
   const tableHeaders = [];
-  const tableNameHeader = [];
 
   $(".table-result > tbody > tr").each((index, element) => {
-    $('.table-result > thead > tr').each((i, eThead) => {
-      if (index === 0) {
-        const ths = $(eThead).find('th');
-        $(ths).each((i, eTh) => {
-          tableHeaders.push($(eTh).text());
-          tableNameHeader.push($(eTh).text());
-        })
-      }
-    })
+    const th_mb = $(element).find('th');
+    $(th_mb).each((i, item) => {
+      tableHeaders.push($(item).text());
+    });
 
     const tableRow = {};
     const tds = $(element).find('td');
-    tableRow[tableNameHeader[0]] = $(element).find('th').text();
 
     $(tds).each((iTd, eTd) => {
       tableRow[tableHeaders.reverse()[iTd]] = $(eTd).text();
     })
-
     scrapedData.push(tableRow);
   });
 
-  const testHtml = generateTable(scrapedData);
-
   bot.sendMessage(chatId, `Xổ số Miền Bắc ngày ${dateMoment.format('DD/MM')} (${daysOfWeek})\n` +
     "--------------------\n\n" +
-    `${testHtml}`,
-    { parse_mode: 'Markdown' }
+    `Đài: ${radioName}\n` +
+    `ĐB: ${scrapedData[1]['ĐB']}\n` +
+    `G1: ${scrapedData[2]['1']}\n` +
+    `G2: ${scrapedData[3]['2']}\n` +
+    `G3: ${scrapedData[4]['3']}\n` +
+    `G4: ${scrapedData[5]['4']}\n` +
+    `G5: ${scrapedData[6]['5']}\n` +
+    `G6: ${scrapedData[7]['6']}\n` +
+    `G7: ${scrapedData[8]['7']}\n`
   )
 })
 
@@ -367,6 +424,7 @@ bot.onText(/\/xsmt (.+)/, async (msg, match) => {
 
 async function getFetch(text, dateMoment) {
   return fetch(`https://xoso.com.vn${text}-${dateMoment.format('DD-MM-YYYY')}.html`).then(res => res.text())
+  // return fetch(`https://xoso.com.vn${text}-25-06-2021.html`).then(res => res.text())
 };
 
 function getDateMatched(match) {
