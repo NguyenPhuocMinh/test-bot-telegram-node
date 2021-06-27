@@ -321,15 +321,12 @@ bot.on('callback_query', async (query) => {
 bot.onText(/\/xsmb (.+)/, async (msg, match) => {
 
   const dateValid = checkValidDateInput(match[1]);
-  console.log("🚀 ~ file: server.js ~ line 324 ~ bot.onText ~ dateValid", dateValid)
 
   const dateFormat = getDateMatched(match[1]);
-  console.log("🚀 ~ file: server.js ~ line 326 ~ bot.onText ~ dateFormat", dateFormat)
 
   const chatId = msg.chat.id;
 
   const dateMoment = dateValid ? moment(new Date(dateFormat)) : null;
-  console.log("🚀 ~ file: server.js ~ line 330 ~ bot.onText ~ dateMoment", dateMoment)
 
   const html = await getFetch('/xsmb', dateMoment);
   const $ = cheerio.load(html);
@@ -354,10 +351,6 @@ bot.onText(/\/xsmb (.+)/, async (msg, match) => {
     })
     scrapedData.push(tableRow);
   });
-
-  console.log("AAAA", tableHeaders);
-
-  console.log("XXX", scrapedData);
 
   bot.sendMessage(chatId, `Xổ số Miền Bắc ngày ${dateMoment.format('DD/MM')} (${daysOfWeek})\n` +
     "--------------------\n\n" +
