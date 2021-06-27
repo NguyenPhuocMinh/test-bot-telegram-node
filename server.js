@@ -3,10 +3,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const moment = require('moment');
 const fetch = require('node-fetch');
 const cheerio = require('cheerio');
-const lodash = require('lodash');
 const Promise = require('bluebird');
-const e = require('express');
-const { groupBy, chain, forOwn } = lodash;
 
 require('dotenv').config();
 Promise.config({
@@ -44,7 +41,7 @@ bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
   const text = msg.text;
 
-  const dateMoment = moment(new Date(msg.date * 1000)).subtract(1, 'days');
+  const dateMoment = moment(new Date(msg.date * 1000)).utc().subtract(7, 'hours');
 
   const html = await getFetch(text, dateMoment);
   const $ = cheerio.load(html);
@@ -60,7 +57,6 @@ bot.on('message', async (msg) => {
 
   const scrapedData = [];
   const tableHeaders = [];
-  const tableNameHeader = [];
 
   $(".table-result > tbody > tr").each((index, element) => {
     if (text === '/xsmb') {
@@ -75,7 +71,6 @@ bot.on('message', async (msg) => {
         const ths = $(eThead).find('th');
         $(ths).each((i, eTh) => {
           tableHeaders.push($(eTh).text());
-          tableNameHeader.push($(eTh).text());
         })
       }
     })
@@ -83,7 +78,9 @@ bot.on('message', async (msg) => {
     const tableRow = {};
     const tds = $(element).find('td');
 
-    tableRow['G'] = $(element).find('th').text();
+    if (text !== '/xsmb') {
+      tableRow['G'] = $(element).find('th').text();
+    }
 
     $(tds).each((iTd, eTd) => {
       if (text === '/xsmb') {
@@ -94,12 +91,23 @@ bot.on('message', async (msg) => {
     scrapedData.push(tableRow);
   });
 
-  const sanitizeData = groupBy(scrapedData, (item, index) => {
-  console.log("🚀 ~ file: server.js ~ line 98 ~ sanitizeData ~ index", index)
-    console.log("XXXX", item);
-    return item.TPHCM;
-  })
-  console.log("🚀 ~ file: server.js ~ line 102 ~ sanitizeData ~ sanitizeData", sanitizeData)
+  const groupData = tableHeaders.filter(e => e !== 'G').map((item, index) => {
+    let result = {};
+
+    result.radio = item;
+    result.item = [
+      { key: scrapedData[0]['G'], value: scrapedData[0][item] },
+      { key: scrapedData[1]['G'], value: scrapedData[1][item] },
+      { key: scrapedData[2]['G'], value: scrapedData[2][item] },
+      { key: scrapedData[3]['G'], value: scrapedData[3][item] },
+      { key: scrapedData[4]['G'], value: scrapedData[4][item] },
+      { key: scrapedData[5]['G'], value: scrapedData[5][item] },
+      { key: scrapedData[6]['G'], value: scrapedData[6][item] },
+      { key: scrapedData[7]['G'], value: scrapedData[7][item] },
+      { key: scrapedData[8]['G'], value: scrapedData[8][item] },
+    ]
+    return result;
+  });
 
   switch (true) {
     case text === '/start':
@@ -167,13 +175,23 @@ bot.on('message', async (msg) => {
     case text === '/xsmn':
       bot.sendMessage(chatId, `Xổ số Miền Nam ngày ${dateMoment.format('DD/MM')} (${daysOfWeek})\n` +
         "--------------------\n\n" +
-        `Đài: hello`
+        `${groupData.map((element, index) => {
+          return `Đài: ${element.radio}\n` +
+            `${element.item.map((e, index) => {
+              return `${index === 8 ? '' : 'G.'}${e.key} : ${e.value}`
+            }).join("\n")}\n` + "--------------------\n\n"
+        }).join("\n")}`,
       );
       break;
     case text === '/xsmt':
       bot.sendMessage(chatId, `Xổ số Miền Trung ngày ${dateMoment.format('DD/MM')} (${daysOfWeek})\n` +
         "--------------------\n\n" +
-        `${scrapedData}`,
+        `${groupData.map((element, index) => {
+          return `Đài: ${element.radio}\n` +
+            `${element.item.map((e, index) => {
+              return `${index === 8 ? '' : 'G.'}${e.key} : ${e.value}`
+            }).join("\n")}\n` + "--------------------\n\n"
+        }).join("\n")}`,
       );
       break;
     case text === 'huy':
@@ -187,9 +205,12 @@ bot.on('callback_query', async (query) => {
   const chatId = query.message.chat.id
   const text = query.data;
 
-  const dateMoment = moment(new Date(query.message.date * 1000)).subtract(1, 'days');
+  const dateMoment = moment(new Date(query.message.date * 1000)).subtract(7, 'hours');
 
-  const html = await getFetch(text, dateMoment);
+  let html = '';
+  if (text !== 'huy') {
+    html = await getFetch(text, dateMoment);
+  }
   const $ = cheerio.load(html);
 
   let daysOfWeek = '';
@@ -203,42 +224,57 @@ bot.on('callback_query', async (query) => {
 
   const scrapedData = [];
   const tableHeaders = [];
-  const tableNameHeader = [];
 
   $(".table-result > tbody > tr").each((index, element) => {
     if (text === '/xsmb') {
       const th_mb = $(element).find('th');
-      $(th_mb).each((i, item) => {
-        tableHeaders.push($(item).text());
+      $(th_mb).each((i, itemTh) => {
+        tableHeaders.push($(itemTh).text());
       });
-    } else {
-      $('.table-result > thead > tr').each((i, eThead) => {
-        if (index === 0) {
-          const ths = $(eThead).find('th');
-          $(ths).each((i, eTh) => {
-            tableHeaders.push($(eTh).text());
-            tableNameHeader.push($(eTh).text());
-          })
-        }
-      })
     }
+
+    $('.table-result > thead > tr').each((indexThead, eThead) => {
+      if (index === 0) {
+        const ths = $(eThead).find('th');
+        $(ths).each((i, eTh) => {
+          tableHeaders.push($(eTh).text());
+        })
+      }
+    })
 
     const tableRow = {};
     const tds = $(element).find('td');
+
     if (text !== '/xsmb') {
-      tableRow[tableNameHeader[0]] = $(element).find('th').text();
+      tableRow['G'] = $(element).find('th').text();
     }
 
     $(tds).each((iTd, eTd) => {
-      if (text !== '/xsmb') {
+      if (text === '/xsmb') {
         tableRow[tableHeaders.reverse()[iTd]] = $(eTd).text();
       }
-      tableRow[tableHeaders.reverse()[iTd]] = $(eTd).text();
+      tableRow[tableHeaders.filter(e => e !== 'G')[iTd]] = $(eTd).text();
     })
     scrapedData.push(tableRow);
   });
 
-  const testHtml = generateTable(scrapedData);
+  const groupData = tableHeaders.filter(e => e !== 'G').map((item, index) => {
+    let result = {};
+
+    result.radio = item;
+    result.item = [
+      { key: scrapedData[0]['G'], value: scrapedData[0][item] },
+      { key: scrapedData[1]['G'], value: scrapedData[1][item] },
+      { key: scrapedData[2]['G'], value: scrapedData[2][item] },
+      { key: scrapedData[3]['G'], value: scrapedData[3][item] },
+      { key: scrapedData[4]['G'], value: scrapedData[4][item] },
+      { key: scrapedData[5]['G'], value: scrapedData[5][item] },
+      { key: scrapedData[6]['G'], value: scrapedData[6][item] },
+      { key: scrapedData[7]['G'], value: scrapedData[7][item] },
+      { key: scrapedData[8]['G'], value: scrapedData[8][item] },
+    ]
+    return result;
+  });
 
   switch (true) {
     case query.data === '/xsmb':
@@ -258,15 +294,23 @@ bot.on('callback_query', async (query) => {
     case query.data === '/xsmn':
       bot.sendMessage(chatId, `Xổ số Miền Nam ngày ${dateMoment.format('DD/MM')} (${daysOfWeek})\n` +
         "--------------------\n\n" +
-        `${testHtml}`,
-        { parse_mode: 'Markdown' }
+        `${groupData.map((element, index) => {
+          return `Đài: ${element.radio}\n` +
+            `${element.item.map((e, index) => {
+              return `${index === 8 ? '' : 'G.'}${e.key} : ${e.value}`
+            }).join("\n")}\n` + "--------------------\n\n"
+        }).join("\n")}`,
       );
       break;
     case query.data === '/xsmt':
       bot.sendMessage(chatId, `Xổ số Miền Trung ngày ${dateMoment.format('DD/MM')} (${daysOfWeek})\n` +
         "--------------------\n\n" +
-        `${testHtml}`,
-        { parse_mode: 'Markdown' }
+        `${groupData.map((element, index) => {
+          return `Đài: ${element.radio}\n` +
+            `${element.item.map((e, index) => {
+              return `${index === 8 ? '' : 'G.'}${e.key} : ${e.value}`
+            }).join("\n")}\n` + "--------------------\n\n"
+        }).join("\n")}`,
       );
       break;
     case query.data === 'huy':
@@ -277,12 +321,15 @@ bot.on('callback_query', async (query) => {
 bot.onText(/\/xsmb (.+)/, async (msg, match) => {
 
   const dateValid = checkValidDateInput(match[1]);
+  console.log("🚀 ~ file: server.js ~ line 324 ~ bot.onText ~ dateValid", dateValid)
 
   const dateFormat = getDateMatched(match[1]);
+  console.log("🚀 ~ file: server.js ~ line 326 ~ bot.onText ~ dateFormat", dateFormat)
 
   const chatId = msg.chat.id;
 
   const dateMoment = dateValid ? moment(new Date(dateFormat)) : null;
+  console.log("🚀 ~ file: server.js ~ line 330 ~ bot.onText ~ dateMoment", dateMoment)
 
   const html = await getFetch('/xsmb', dateMoment);
   const $ = cheerio.load(html);
@@ -307,6 +354,10 @@ bot.onText(/\/xsmb (.+)/, async (msg, match) => {
     })
     scrapedData.push(tableRow);
   });
+
+  console.log("AAAA", tableHeaders);
+
+  console.log("XXX", scrapedData);
 
   bot.sendMessage(chatId, `Xổ số Miền Bắc ngày ${dateMoment.format('DD/MM')} (${daysOfWeek})\n` +
     "--------------------\n\n" +
@@ -339,36 +390,54 @@ bot.onText(/\/xsmn (.+)/, async (msg, match) => {
 
   const scrapedData = [];
   const tableHeaders = [];
-  const tableNameHeader = [];
 
   $(".table-result > tbody > tr").each((index, element) => {
-    $('.table-result > thead > tr').each((i, eThead) => {
+    $('.table-result > thead > tr').each((indexThead, eThead) => {
       if (index === 0) {
         const ths = $(eThead).find('th');
         $(ths).each((i, eTh) => {
           tableHeaders.push($(eTh).text());
-          tableNameHeader.push($(eTh).text());
         })
       }
     })
 
     const tableRow = {};
     const tds = $(element).find('td');
-    tableRow[tableNameHeader[0]] = $(element).find('th').text();
+
+    tableRow['G'] = $(element).find('th').text();
 
     $(tds).each((iTd, eTd) => {
-      tableRow[tableHeaders.reverse()[iTd]] = $(eTd).text();
+      tableRow[tableHeaders.filter(e => e !== 'G')[iTd]] = $(eTd).text();
     })
-
     scrapedData.push(tableRow);
   });
 
-  const testHtml = generateTable(scrapedData);
+  const groupData = tableHeaders.filter(e => e !== 'G').map((item, index) => {
+    let result = {};
 
-  bot.sendMessage(chatId, `Xổ số Miền Bắc ngày ${dateMoment.format('DD/MM')} (${daysOfWeek})\n` +
+    result.radio = item;
+    result.item = [
+      { key: scrapedData[0]['G'], value: scrapedData[0][item] },
+      { key: scrapedData[1]['G'], value: scrapedData[1][item] },
+      { key: scrapedData[2]['G'], value: scrapedData[2][item] },
+      { key: scrapedData[3]['G'], value: scrapedData[3][item] },
+      { key: scrapedData[4]['G'], value: scrapedData[4][item] },
+      { key: scrapedData[5]['G'], value: scrapedData[5][item] },
+      { key: scrapedData[6]['G'], value: scrapedData[6][item] },
+      { key: scrapedData[7]['G'], value: scrapedData[7][item] },
+      { key: scrapedData[8]['G'], value: scrapedData[8][item] },
+    ]
+    return result;
+  });
+
+  bot.sendMessage(chatId, `Xổ số Miền Nam ngày ${dateMoment.format('DD/MM')} (${daysOfWeek})\n` +
     "--------------------\n\n" +
-    `${testHtml}`,
-    { parse_mode: 'Markdown' }
+    `${groupData.map((element, index) => {
+      return `Đài: ${element.radio}\n` +
+        `${element.item.map((e, index) => {
+          return `${index === 8 ? '' : 'G.'}${e.key} : ${e.value}`
+        }).join("\n")}\n` + "--------------------\n\n"
+    }).join("\n")}`,
   )
 });
 
@@ -389,87 +458,67 @@ bot.onText(/\/xsmt (.+)/, async (msg, match) => {
 
   const scrapedData = [];
   const tableHeaders = [];
-  const tableNameHeader = [];
 
   $(".table-result > tbody > tr").each((index, element) => {
-    $('.table-result > thead > tr').each((i, eThead) => {
+
+
+    $('.table-result > thead > tr').each((indexThead, eThead) => {
       if (index === 0) {
         const ths = $(eThead).find('th');
         $(ths).each((i, eTh) => {
           tableHeaders.push($(eTh).text());
-          tableNameHeader.push($(eTh).text());
         })
       }
     })
 
     const tableRow = {};
     const tds = $(element).find('td');
-    tableRow[tableNameHeader[0]] = $(element).find('th').text();
+    tableRow['G'] = $(element).find('th').text();
 
     $(tds).each((iTd, eTd) => {
-      tableRow[tableHeaders.reverse()[iTd]] = $(eTd).text();
+      tableRow[tableHeaders.filter(e => e !== 'G')[iTd]] = $(eTd).text();
     })
-
     scrapedData.push(tableRow);
   });
 
-  const testHtml = generateTable(scrapedData);
+  const groupData = tableHeaders.filter(e => e !== 'G').map((item, index) => {
+    let result = {};
 
-  bot.sendMessage(chatId, `Xổ số Miền Bắc ngày ${dateMoment.format('DD/MM')} (${daysOfWeek})\n` +
+    result.radio = item;
+    result.item = [
+      { key: scrapedData[0]['G'], value: scrapedData[0][item] },
+      { key: scrapedData[1]['G'], value: scrapedData[1][item] },
+      { key: scrapedData[2]['G'], value: scrapedData[2][item] },
+      { key: scrapedData[3]['G'], value: scrapedData[3][item] },
+      { key: scrapedData[4]['G'], value: scrapedData[4][item] },
+      { key: scrapedData[5]['G'], value: scrapedData[5][item] },
+      { key: scrapedData[6]['G'], value: scrapedData[6][item] },
+      { key: scrapedData[7]['G'], value: scrapedData[7][item] },
+      { key: scrapedData[8]['G'], value: scrapedData[8][item] },
+    ]
+    return result;
+  });
+
+  bot.sendMessage(chatId, `Xổ số Miền Trung ngày ${dateMoment.format('DD/MM')} (${daysOfWeek})\n` +
     "--------------------\n\n" +
-    `${testHtml}`,
-    { parse_mode: 'Markdown' }
+    `${groupData.map((element, index) => {
+      return `Đài: ${element.radio}\n` +
+        `${element.item.map((e, index) => {
+          return `${index === 8 ? '' : 'G.'}${e.key} : ${e.value}`
+        }).join("\n")}\n` + "--------------------\n\n"
+    }).join("\n")}`,
   )
 });
 
 async function getFetch(text, dateMoment) {
   return fetch(`https://xoso.com.vn${text}-${dateMoment.format('DD-MM-YYYY')}.html`).then(res => res.text())
-  // return fetch(`https://xoso.com.vn${text}-25-06-2021.html`).then(res => res.text())
 };
 
 function getDateMatched(match) {
-  return match[1].split("-").reverse().join("-");
-}
+  return match.split("-").reverse().join("-");
+};
 
 function checkValidDateInput(dateMatch) {
   const regex = new RegExp(/^([0-2][0-9]|(3)[0-1])(\-)(((0)[0-9])|((1)[0-2]))(\-)\d{4}$/i);
   return regex.test(dateMatch);
-}
-
-function generateTable(data) {
-  var html = '';
-
-  if (typeof (data[0]) === 'undefined') {
-    return null;
-  }
-
-  if (data[0].constructor === String) {
-    html += '<tr>\r\n';
-    for (var item in data) {
-      html += '<td>' + data[item] + '</td>\r\n';
-    }
-    html += '</tr>\r\n';
-  }
-
-  if (data[0].constructor === Array) {
-    for (var row in data) {
-      html += '<tr>\r\n';
-      for (var item in data[row]) {
-        html += '<td>' + data[row][item] + '</td>\r\n';
-      }
-      html += '</tr>\r\n';
-    }
-  }
-
-  if (data[0].constructor === Object) {
-    for (var row in data) {
-      html += '<tr>\r\n';
-      for (var item in data[row]) {
-        html += '<td>' + item + ':' + data[row][item] + '</td>\r\n';
-      }
-      html += '</tr>\r\n';
-    }
-  }
-
-  return html;
-}
+};
